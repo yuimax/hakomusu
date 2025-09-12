@@ -286,17 +286,17 @@
 		function waiter(msec) {
 			return new Promise((resolve) => {
 				// タイマーを設定し、その満了時に resolve(true) を実行する
-				// stopButton のハンドラも忘れずに削除すること
+				// stopButton のハンドラは明示的に削除する
 				const timerID = setTimeout(() => {
 					stopButton.removeEventListener("click", clickHandler);
 					resolve(true);
 				}, msec);
 
 				// stopButton クリックで、resolve(false) を実行する
-				// {once: true} があるのでハンドラは実行後に自動削除される
+				// {once: true} の効果で、ハンドラは実行後に自動削除される
 				stopButton.addEventListener("click", clickHandler, { once: true });
 
-				// clickHandler() はこの位置で宣言してよい（fnctionは後方参照可能）
+				// clickHandler() はここで宣言（function は後方参照可）
 				function clickHandler() {
 					clearTimeout(timerID);
 					resolve(false);
@@ -374,31 +374,31 @@
 			}
 
 			// 可能な1マス移動を列挙する
-			const moves = [];
+			const moves1 = [];
 			for (const p of pieces) {
 				for (const dp of offsets) {
 					if (canMove(grid, p.points, p.shape.type, dp)) {
-						moves.push([p, [dp]]);
+						moves1.push([p, dp]);
 					}
 				}
 			}
 
 			// 可能な2マス移動を列挙する
 			const moves2 = [];
-			for (const [p, [dp1]] of moves) {
+			for (const [p, dp1] of moves1) {
 				for (const dp2 of offsets) {
 					const dp = dp1.add(dp2);
 					if (dp.isZero()) {
 						continue;   // 2マス移動で元に戻る場合はスキップ
 					}
 					if (canMove(grid, p.points, p.shape.type, dp)) {
-						moves2.push([p, [dp1, dp2]]);
+						moves2.push([p, dp1, dp2]);
 					}
 				}
 			}
 
-			// 1マス移動と2マス移動を結合して返す
-			return [...moves, ...moves2];
+			// 1マス移動と2マス移動をまとめて返す
+			return [...moves1, ...moves2];
 		}
 
 		// ゴール状態かどうか調べる
@@ -458,7 +458,7 @@
 				// 可能な移動方法をリストアップする
 				for (const moveData of getPossibleMoves(currentPieces)) {
 					// moveData を駒と移動手順に分割する
-					const [targetPiece, moveSequence] = moveData;
+					const [targetPiece, ...moveSequence] = moveData;
 
 					// 合計移動量を得る
 					const move = { x: 0, y: 0 };
@@ -519,7 +519,7 @@
 			let stopped = false;
 			let count = 0;
 		outerloop:
-			for (const [targetPiece, moveSequence] of lastResult) {
+			for (const [targetPiece, ...moveSequence] of lastResult) {
 				++count;
 				// 駒が変わるごとに250ミリ秒待機する
 				if (!await waiter(250)) {
