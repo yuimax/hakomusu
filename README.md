@@ -3,3 +3,5 @@
 * Google Gemini が生成したコードを改良した
 * 実行例＞ <https://yuima.neocities.org/hakomusu/>
 
+## 参考サイト
+- Qiita: [もっとも気難しい箱入り娘は誰なのか](https://qiita.com/m-kasahr/items/74071131ee28116a187c) (@m-kasahr / Motoyuki Kasahara)
