@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta name="viewport" content="width=device-width">
+	<meta charset="UTF-8">
+	<title>箱入り娘パズル</title>
+	<style>
+		#main {
+			width: 100%;
+			max-width: 360px;
+			margin: 0 auto;
+		}
+
+		#game-board {
+			display: grid;
+			grid-template-columns: repeat(4, 80px);
+			grid-template-rows: repeat(5, 80px);
+			gap: 2px;
+			border: 2px solid #333;
+			width: fit-content;
+			margin: 20px 8px;
+			background-color: #f0f0f0;
+		}
+
+		#game-board .piece {
+			position: relative;
+			box-sizing: border-box;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background-color: #8c735d;
+			border: 1px solid #5a4b3d;
+			font-weight: bold;
+			color: white;
+		}
+
+		#game-board .piece.target {
+			background-color: #d9534f;
+		}
+
+		#msg-box {
+			width: 320px;
+			height: 24px;
+			border: 1px solid gray;
+			margin: 0 0 16px 8px;
+			padding: 2px 4px;
+		}
+
+		#control-panel {
+			display: flex;
+			gap: 8px;
+			margin: 0px 0px 16px 8px;
+		}
+
+	</style>
+</head>
+<body>
+	<div id="main">
+		<h2>【箱入り娘】<a href="https://github.com/yuimax/hakomusu">source</a></h2>
+		<div id="game-board"></div>
+		<div id="msg-box"></div>
+		<div id="control-panel">
+			<button id="solve-button">パズルを解く</button>
+			<button id="redraw-button">解を表示</button>
+			<button id="stop-button">中断</button>
+			<select id="select-box">
+				<option>配置 1</option>
+				<option>配置 2</option>
+				<option>配置 3</option>
+			</select>
+		</div>
+	</div>
+
+	<script>
+		// HTML要素
+		const gameBoard = document.getElementById('game-board');
+		const msgBox = document.getElementById('msg-box');
+		const solveButton = document.getElementById('solve-button');
+		const redrawButton = document.getElementById('redraw-button');
+		const stopButton =  document.getElementById('stop-button');
+		const selectBox = document.getElementById('select-box');
+
+		// 実行モード
+		const Mode = {
+			WAITING  : 0,   // スタート待ち
+			SOLVING  : 1,   // 解の探索中
+			FOUND    : 2,   // 解を発見した
+			NOTFOUND : 3,   // 解が見つからなかった
+			DRAWING  : 4,   // 解の表示中
+			ERROR    : 5,   // 初期データの不備
+		};
+ 
+		function setMode(mode) {
+			switch (mode) {
+				default:
+					mode = Mode.WAITING;
+					// FALL THROUGH
+				case Mode.WAITING:
+					solveButton.disabled = false;
+					redrawButton.disabled = true;
+					stopButton.disabled = true;
+					selectBox.disabled = false;
+					break;
+				case Mode.SOLVING:
+				case Mode.DRAWING:
+					solveButton.disabled = true;
+					redrawButton.disabled = true;
+					stopButton.disabled = false;
+					selectBox.disabled = true;
+					break;
+				case Mode.FOUND:
+					solveButton.disabled = false;
+					redrawButton.disabled = false;
+					stopButton.disabled = true;
+					selectBox.disabled = false;
+					break;
+				case Mode.NOTFOUND:
+					solveButton.disabled = false;
+					redrawButton.disabled = true;
+					stopButton.disabled = true;
+					selectBox.disabled = false;
+					break;
+				case Mode.ERROR:
+					solveButton.disabled = true;
+					redrawButton.disabled = true;
+					stopButton.disabled = true;
+					selectBox.disabled = false;
+					break;
+			}
+		}
+
+		// 盤面のサイズ
+		const WIDTH = 4;
+		const HEIGHT = 5;
+
+		// 駒の種類
+		const Shape = {
+			BIG   : { type: 1, w: 2, h: 2 },  // 2x2 大きい正方形
+			TATE  : { type: 2, w: 1, h: 2 },  // 1x2 縦の長方形
+			YOKO  : { type: 3, w: 2, h: 1 },  // 2x1 横の長方形
+			SMALL : { type: 4, w: 1, h: 1 },  // 1x1 小さい正方形
+		};
+
+		// 駒の初期配置
+		const initialPiecesData = [
+			[ // 配置1
+				{ id: 'musume', x: 2, y: 1, shape: Shape.BIG,   name: '娘', goal: {x: 2, y: 4} },
+				{ id: 'chichi', x: 1, y: 1, shape: Shape.TATE,  name: '父親' },
+				{ id: 'haha',   x: 4, y: 1, shape: Shape.TATE,  name: '母親' },
+				{ id: 'genan',  x: 1, y: 3, shape: Shape.TATE,  name: '下男' },
+				{ id: 'gejo',   x: 4, y: 3, shape: Shape.TATE,  name: '下女' },
+				{ id: 'bantou', x: 2, y: 3, shape: Shape.YOKO,  name: '番頭' },
+				{ id: 'kozou1', x: 2, y: 4, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou2', x: 3, y: 4, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou3', x: 1, y: 5, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou4', x: 4, y: 5, shape: Shape.SMALL, name: '小僧' },
+			],
+			[ // 配置2
+				{ id: 'musume', x: 2, y: 1, shape: Shape.BIG,   name: '娘', goal: {x: 2, y: 4} },
+				{ id: 'chichi', x: 1, y: 1, shape: Shape.TATE,  name: '父親' },
+				{ id: 'haha',   x: 4, y: 1, shape: Shape.TATE,  name: '母親' },
+				{ id: 'kozou1', x: 1, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou2', x: 2, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou3', x: 3, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou4', x: 4, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'genan',  x: 1, y: 4, shape: Shape.TATE,  name: '下男' },
+				{ id: 'bantou', x: 2, y: 4, shape: Shape.YOKO,  name: '番頭' },
+				{ id: 'gejo',   x: 4, y: 4, shape: Shape.TATE,  name: '下女' },
+			],
+			[ // 配置3
+				{ id: 'musume', x: 2, y: 1, shape: Shape.BIG,   name: '娘', goal: {x: 2, y: 4}},
+				{ id: 'chichi', x: 1, y: 1, shape: Shape.TATE,  name: '父親' },
+				{ id: 'haha',   x: 4, y: 1, shape: Shape.TATE,  name: '母親' },
+				{ id: 'genan',  x: 1, y: 3, shape: Shape.TATE,  name: '下男' },
+				{ id: 'kozou1', x: 2, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou2', x: 3, y: 3, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'gejo',   x: 4, y: 3, shape: Shape.TATE,  name: '下女' },
+				{ id: 'kozou3', x: 2, y: 4, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou4', x: 3, y: 4, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou5', x: 1, y: 5, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou6', x: 4, y: 5, shape: Shape.SMALL, name: '小僧' },
+			],
+		];
+		
+		// 初期配置
+		let initlalPieces = null;
+
+		// 見つかった解
+		let lastResult = null;
+
+		// 盤面を描画する
+		function drawBoard(pieces) {
+			gameBoard.innerHTML = '';
+			for (const p of pieces) {
+				const elem = document.createElement('div');
+				elem.className = 'piece';
+				elem.id = p.id;
+				elem.style.gridColumnStart = p.x;
+				elem.style.gridRowStart = p.y;
+				elem.style.gridColumnEnd = `span ${p.shape.w}`;
+				elem.style.gridRowEnd = `span ${p.shape.h}`;
+				elem.textContent = p.name;
+				if (p.goal) {
+					elem.classList.add('target');
+				}
+				gameBoard.appendChild(elem);
+			}
+		}
+
+		// 盤面の選択
+		function resetBoard() {
+			// selectBoxの選択番号を得る
+			const index = Math.min(selectBox.selectedIndex, initialPiecesData.length - 1);
+			if (selectBox.selectedIndex != index) {
+				selectBox.selectedIndex = index;
+			}
+			// 盤面を初期化する
+			if (index >= 0) {
+				initialPieces = initialPiecesData[index];
+				drawBoard(initialPieces);
+				msgBox.innerText = '';
+				setMode(Mode.WAITING);
+			}
+			else {
+				initialPieces = null;
+				msgBox.innerText = '盤面データがありません';
+				setMode(Mode.ERROR);
+			}
+		}
+
+		// 指定範囲の格子点の座標を得る
+		function getGridPoints(x, y, width, height) {
+			const points = [];
+			for (let j = 0; j < height; j++) {
+				for (let i = 0; i < width; i++) {
+					points.push([x + i, y + j]);
+				}
+			}
+			return points;
+		}
+
+		// 駒の状態を文字列に変換する
+		function getState(pieces) {
+			const stats = Array(WIDTH * HEIGHT).fill(0);
+			for (const p of pieces) {
+				const points = getGridPoints(p.x, p.y, p.shape.w, p.shape.h);
+				const type = p.shape.type;
+				for (const [x, y] of points) {
+					stats[(y - 1) * WIDTH + (x - 1)] = type;
+				}
+			}
+			return stats.join('');
+		}
+
+		// 時間待ち用のPromiseを返す
+		// 使い方： const done = await waiter(msec);
+		// 	msecミリ秒が経過すると終了し、done=true になる
+		// 	stopButtonをクリックすると即座に終了し、done=false になる
+		//	await waiter(0) で、UIの画面更新待ちにも利用できる
+		function waiter(msec) {
+			return new Promise((resolve) => {
+				// タイマーを設定し、その満了時に resolve(true) を実行する
+				// stopButton のハンドラも忘れずに削除すること
+				const timerID = setTimeout(() => {
+					stopButton.removeEventListener("click", clickHandler);
+					resolve(true);
+				}, msec);
+
+				// stopButton クリックで、resolve(false) を実行する
+				// {once: true} があるのでハンドラは実行後に自動削除される
+				stopButton.addEventListener("click", clickHandler, { once: true });
+
+				// clickHandler() はこの位置で宣言してよい（fnctionは後方参照可能）
+				function clickHandler() {
+					clearTimeout(timerID);
+					resolve(false);
+				}
+			});
+		}
+
+		// ベクタークラス
+		class Vector {
+			constructor(x, y) { this.x = x; this.y = y; }
+			add(other) { return new Vector(this.x + other.x, this.y + other.y); }
+			isZero()   { return this.x == 0 && this.y == 0; }
+			toString() { return `(${this.x}, ${this.y})`; }
+		}
+
+		// 上下左右の移動オフセット
+		const offsets = [
+			new Vector( 0, -1),  // 上移動
+			new Vector( 0,  1),  // 下移動
+			new Vector(-1,  0),  // 左移動
+			new Vector( 1,  0),  // 右移動
+		];
+
+		// 空の盤面を作っておく
+		const emptyGrid = (() => {
+			// 上下左右に1マスずつ大きい盤面を作り、9で埋める
+			const grid = Array(HEIGHT + 2).fill().map(() => Array(WIDTH + 2).fill(9));
+
+			// 内部を0で埋める
+			for (const [x, y] of getGridPoints(1, 1, WIDTH, HEIGHT)) {
+				grid[y][x] = 0;
+			}
+
+			return grid;
+		})();
+
+		// 盤面に駒を置く
+		//  grid: 盤面
+		//  points: 駒の占有座標（[x,y]の配列）
+		//  type: 駒の種類
+		function setPiece(grid, points, type) {
+			for (const [x, y] of points) {
+				grid[y][x] = type;
+			}
+		}
+
+		// 駒が移動可能か調べる
+		//  grid: 盤面
+		//  points: 駒の占有座標（[x,y]の配列）
+		//  type: 駒の種類
+		//  dp: 駒の移動量 Vector(x, y)
+		function canMove(grid, points, type, dp) {
+			// 駒を取り除く
+			setPiece(grid, points, 0);
+
+			// 移動先の盤面がすべて0なら移動可能
+			const result = points.every(([x, y]) => grid[y + dp.y][x + dp.x] == 0);
+
+			// 駒を戻す
+			setPiece(grid, points, type);
+
+			// 移動可能ならtrue、不可ならfalseを返す
+			return result;
+		}
+
+		// 可能な移動方法のリストを得る
+		function getPossibleMoves(pieces) {
+			// emptyGridをコピーして空の盤面を作る
+			const grid = emptyGrid.map(item => [...item]);
+
+			// すべての駒を盤面に置く
+			for (const p of pieces) {
+				p.points = getGridPoints(p.x, p.y, p.shape.w, p.shape.h)
+				setPiece(grid, p.points, p.shape.type);
+			}
+
+			// 可能な1マス移動を列挙する
+			const moves = [];
+			for (const p of pieces) {
+				for (const dp of offsets) {
+					if (canMove(grid, p.points, p.shape.type, dp)) {
+						moves.push([p, [dp]]);
+					}
+				}
+			}
+
+			// 可能な2マス移動を列挙する
+			const moves2 = [];
+			for (const [p, [dp1]] of moves) {
+				for (const dp2 of offsets) {
+					const dp = dp1.add(dp2);
+					if (dp.isZero()) {
+						continue;   // 2マス移動で元に戻る場合はスキップ
+					}
+					if (canMove(grid, p.points, p.shape.type, dp)) {
+						moves2.push([p, [dp1, dp2]]);
+					}
+				}
+			}
+
+			// 1マス移動と2マス移動を結合して返す
+			return [...moves, ...moves2];
+		}
+
+		// ゴール状態かどうか調べる
+		function isGoal(pieces) {
+			for (const p of pieces) {
+				if (p.goal) {
+					return (p.x == p.goal.x && p.y == p.goal.y);
+				}
+			}
+			return false;
+		}
+
+		// 解法履歴から移動手順の配列を得る
+		function getResult(history) {
+			const moves = [];
+			while (history != null) {
+				moves.push(history.move);
+				history = history.parent;
+			}
+			return moves.reverse();
+		}
+
+		// 問題を解く
+		async function solvePuzzle() {
+
+			// データの初期化
+			const queue = [];
+			const known = new Set();
+
+			queue.push([initialPieces, null]);
+			known.add(getState(initialPieces));
+			lastResult = null;
+
+			const startTime = Date.now();
+			let checkTime = startTime;
+
+			// 盤面の表示
+			msgBox.innerText = '解を探しています';
+			setMode(Mode.SOLVING);
+			drawBoard(initialPieces);
+			await waiter(0);
+
+			// 解を見つけるか、キューがなくなるまでループ
+			while (queue.length > 0) {
+				// [盤面, 履歴] を取り出す
+				const [currentPieces, history] = queue.shift();
+
+				// ゴールなら終了
+				if (isGoal(currentPieces)) {
+					lastResult = getResult(history);
+					const timeStr = ((Date.now() - startTime) / 1000).toFixed(3);
+					msgBox.innerText = `解を発見！ ${lastResult.length} 手 / ${timeStr} 秒`;
+					setMode(Mode.FOUND);
+					return;
+				}
+
+				// 可能な移動方法をリストアップする
+				for (const moveData of getPossibleMoves(currentPieces)) {
+					// moveData を駒と移動手順に分割する
+					const [targetPiece, moveSequence] = moveData;
+
+					// 合計移動量を得る
+					const move = { x: 0, y: 0 };
+					for (const dp of moveSequence) {
+						move.x += dp.x;
+						move.y += dp.y;
+					}
+
+					// currentPieces の中の targetPiece のみ移動した newPieces を作る
+					const newPieces = currentPieces.map(p => {
+						if (p.id == targetPiece.id)
+							return { ...p, x: p.x + move.x, y: p.y + move.y };
+						else
+							return p;
+					});
+
+					// 未知の盤面ならキューに追加する
+					const state = getState(newPieces);
+					if (!known.has(state)) {
+						queue.push([newPieces, { parent: history, move: moveData }]);
+						known.add(state);
+					}
+				}
+				
+				// 250ミリ秒ごとに中断チェック
+				const now = Date.now();
+				if (now - checkTime >= 250) {
+					if (!await waiter(0)) {
+						// [中断]ボタンが押された
+						msgBox.innerText = '探索を中断しました';
+						setMode(Mode.WAITING);
+						return;
+					}
+					checkTime = now;
+				}
+			}
+
+			// キューをすべてチェックした
+			msgBox.innerText =  '解がありません';
+			setMode(Mode.NOTFOUND);
+		}
+
+		// lastResult を表示する
+		async function drawResult() {
+			// 解がない場合はすぐ戻る
+			if (lastResult == null) {
+				return;
+			}
+
+			// 初期化
+			let currentPieces = initialPieces.map(item => ({...item}));
+			drawBoard(currentPieces);
+			msgBox.innerText = '解を表示します';
+			setMode(Mode.DRAWING);
+			await waiter(0);
+
+			// 解法手順の表示
+			let stopped = false;
+			let count = 0;
+		outerloop:
+			for (const [targetPiece, moveSequence] of lastResult) {
+				++count;
+				// 駒が変わるごとに250ミリ秒待機する
+				if (!await waiter(250)) {
+					stopped = true;
+					break;
+				}
+				// 駒を動かす
+				for (const dp of moveSequence) {
+					// 動かす前に250ミリ秒待機する
+					if (!await waiter(250)) {
+						stopped = true;
+						break outerloop;
+					}
+					// currentPieces 内の targetPiece.id の駒を移動する
+					const piece = currentPieces.find(p => p.id == targetPiece.id);
+					piece.x += dp.x;
+					piece.y += dp.y;
+					// 盤面を表示する
+					drawBoard(currentPieces);
+				}
+				// 現在の手数を表示する
+				msgBox.innerText = `解を表示中 ${count}/${lastResult.length}`;
+			}
+
+			if (stopped) {
+				msgBox.innerText = `表示を中断しました ${count}/${lastResult.length}`;
+			}
+			else {
+				msgBox.innerText = `解を表示しました ${count}/${lastResult.length}`;
+			}
+			setMode(Mode.FOUND);
+		}
+
+		// [パズルを解く] ボタン
+		solveButton.addEventListener('click', solvePuzzle);
+
+		// [解を表示] ボタン
+		redrawButton.addEventListener('click', drawResult);
+
+		// [配置] 選択ボックス
+		selectBox.addEventListener('change', resetBoard);
+
+		// 初期設定
+		selectBox.selectedIndex = 0;
+		resetBoard();
+
+	</script>
+</body>
+</html>
