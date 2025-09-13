@@ -187,22 +187,22 @@
 				{ id: 'chichi', x: 1, y: 1, shape: Shape.TATE,  name: '父親' },
 				{ id: 'haha',   x: 4, y: 1, shape: Shape.TATE,  name: '母親' },
 				{ id: 'kozou1', x: 1, y: 3, shape: Shape.SMALL, name: '小僧' },
-				{ id: 'jochuu', x: 2, y: 3, shape: Shape.YOKO,  name: '女中' },
 				{ id: 'kozou2', x: 4, y: 3, shape: Shape.SMALL, name: '小僧' },
-				{ id: 'bantou', x: 1, y: 4, shape: Shape.YOKO,  name: '番頭' },
-				{ id: 'tedai',  x: 3, y: 4, shape: Shape.YOKO,  name: '手代' },
 				{ id: 'kozou3', x: 1, y: 5, shape: Shape.SMALL, name: '小僧' },
 				{ id: 'kozou4', x: 4, y: 5, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'jochuu', x: 2, y: 3, shape: Shape.YOKO,  name: '女中' },
+				{ id: 'bantou', x: 1, y: 4, shape: Shape.YOKO,  name: '番頭' },
+				{ id: 'tedai',  x: 3, y: 4, shape: Shape.YOKO,  name: '手代' },
 			],
 			[ // 配置5
 				{ id: 'musume', x: 1, y: 2, shape: Shape.BIG,   name: '娘', goal: {x: 2, y: 4}},
 				{ id: 'kozou1', x: 1, y: 1, shape: Shape.SMALL, name: '小僧' },
 				{ id: 'kozou2', x: 2, y: 1, shape: Shape.SMALL, name: '小僧' },
 				{ id: 'kozou3', x: 3, y: 1, shape: Shape.SMALL, name: '小僧' },
+				{ id: 'kozou4', x: 1, y: 4, shape: Shape.SMALL, name: '小僧' },
 				{ id: 'chichi', x: 4, y: 1, shape: Shape.TATE,  name: '父親' },
 				{ id: 'haha',   x: 3, y: 2, shape: Shape.TATE,  name: '母親' },
 				{ id: 'genan',  x: 4, y: 3, shape: Shape.TATE,  name: '下男' },
-				{ id: 'kozou4', x: 1, y: 4, shape: Shape.SMALL, name: '小僧' },
 				{ id: 'bantou', x: 2, y: 4, shape: Shape.YOKO,  name: '番頭' },
 				{ id: 'johuu',  x: 1, y: 5, shape: Shape.YOKO,  name: '女中' },
 			],
@@ -484,15 +484,14 @@
 				}
 				
 				// 250ミリ秒ごとに中断チェック
-				const now = Date.now();
-				if (now - checkTime >= 250) {
+				if (Date.now() >= checkTime) {
 					if (!await waiter(0)) {
 						// [中断]ボタンが押された
 						msgBox.innerText = '探索を中断しました';
 						setMode(Mode.WAITING);
 						return;
 					}
-					checkTime = now;
+					checkTime += 250;
 				}
 			}
 
